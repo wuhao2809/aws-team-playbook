@@ -46,11 +46,9 @@ WALL_HTML = """<!doctype html>
 
 <form method="POST" action="/intro">
   <label>Name <input name="name" required maxlength="60"></label>
-  <label>Team (1–6) <input name="team" required maxlength="20"></label>
+  <label>Nick Name <input name="nickname" required maxlength="20"></label>
   <label>Hobby <input name="hobby" required maxlength="120"></label>
   <label>Future career dream <input name="dream" required maxlength="200"></label>
-  <label>Most useful CS subject you've taken <input name="useful" required maxlength="120"></label>
-  <label>Most useless CS subject you've taken <input name="useless" required maxlength="120"></label>
   <button type="submit">Post to the wall</button>
 </form>
 
@@ -58,11 +56,9 @@ WALL_HTML = """<!doctype html>
 <div class="grid">
   {% for p in posts %}
   <div class="card">
-    <h3>{{ p.name }} <span style="font-weight:400;color:#888;font-size:.8em">· Team {{ p.team }}</span></h3>
+    <h3>{{ p.name }} <span style="font-weight:400;color:#888;font-size:.8em">· {{ p.nickname }}</span></h3>
     <div class="field"><b>Hobby:</b> {{ p.hobby }}</div>
     <div class="field"><b>Dream:</b> {{ p.dream }}</div>
-    <div class="field"><b>Most useful:</b> {{ p.useful }}</div>
-    <div class="field"><b>Most useless:</b> {{ p.useless }}</div>
   </div>
   {% endfor %}
 </div>
@@ -87,7 +83,7 @@ def wall():
 
 @app.route("/intro", methods=["POST"])
 def intro():
-    fields = ["name", "team", "hobby", "dream", "useful", "useless"]
+    fields = ["name", "nickname", "hobby", "dream"]
     payload = {f: (request.form.get(f) or "").strip() for f in fields}
     if not all(payload.values()):
         abort(400, "All fields are required.")

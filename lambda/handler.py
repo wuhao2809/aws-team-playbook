@@ -30,11 +30,9 @@ def handler(event, _context):
             "id": body["id"],
             "created_at": body["created_at"],
             "name": _clean(body["name"]),
-            "team": _clean(body["team"]),
+            "nickname": _clean(body["nickname"]),
             "hobby": _clean(body["hobby"]),
             "dream": _clean(body["dream"]),
-            "useful": _clean(body["useful"]),
-            "useless": _clean(body["useless"]),
         }
 
         ddb.put_item(Item=item)
