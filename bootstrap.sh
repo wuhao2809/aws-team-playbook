@@ -137,9 +137,9 @@ rm -f "$TRUST_FILE"
 
 # ---- 7. GitHub repo secrets ---------------------------------------------------
 step "GitHub repo secrets"
-echo -n "$ROLE_ARN" | gh secret set AWS_DEPLOY_ROLE_ARN --repo "$REPO_FULL" --body - >/dev/null
-echo -n "$BUCKET"   | gh secret set TF_STATE_BUCKET     --repo "$REPO_FULL" --body - >/dev/null
-echo -n "$LOCK_TABLE" | gh secret set TF_LOCK_TABLE     --repo "$REPO_FULL" --body - >/dev/null
+gh secret set AWS_DEPLOY_ROLE_ARN --repo "$REPO_FULL" --body "$ROLE_ARN"   >/dev/null
+gh secret set TF_STATE_BUCKET     --repo "$REPO_FULL" --body "$BUCKET"     >/dev/null
+gh secret set TF_LOCK_TABLE       --repo "$REPO_FULL" --body "$LOCK_TABLE" >/dev/null
 ok "AWS_DEPLOY_ROLE_ARN, TF_STATE_BUCKET, TF_LOCK_TABLE set"
 
 # ---- 8. local backend.hcl -----------------------------------------------------
