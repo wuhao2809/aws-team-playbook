@@ -3,6 +3,11 @@ name: terraform-apply
 on:
   push:
     branches: [main]
+    paths:
+      - "app/**"
+      - "lambda/**"
+      - "terraform/**"
+      - ".github/workflows/apply.yml"
 
 permissions:
   id-token: write
