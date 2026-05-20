@@ -1,6 +1,7 @@
 .terraform/
 *.tfstate
 *.tfstate.*
+terraform/backend.hcl
 .lambda.zip
 __pycache__/
 *.pyc

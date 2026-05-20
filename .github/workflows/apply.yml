@@ -17,7 +17,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: us-east-1
+          aws-region: us-west-2
 
       - name: Resolve account ID
         id: aws
@@ -25,18 +25,16 @@ jobs:
           ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
           echo "account=$ACCOUNT" >> "$GITHUB_OUTPUT"
 
-      # Build & push the container only when the app changed. The
-      # image tag is the commit SHA so each apply pins a specific
-      # version of the code.
+      # The ECR repo was created by ./bootstrap.sh; we just push to it.
       - name: Login to ECR
         run: |
-          aws ecr get-login-password --region us-east-1 \
+          aws ecr get-login-password --region us-west-2 \
             | docker login --username AWS --password-stdin \
-              ${{ steps.aws.outputs.account }}.dkr.ecr.us-east-1.amazonaws.com
+              ${{ steps.aws.outputs.account }}.dkr.ecr.us-west-2.amazonaws.com
 
       - name: Build and push image
         env:
-          REPO: ${{ steps.aws.outputs.account }}.dkr.ecr.us-east-1.amazonaws.com/teamgram-app
+          REPO: ${{ steps.aws.outputs.account }}.dkr.ecr.us-west-2.amazonaws.com/teamgram-app
           TAG: ${{ github.sha }}
         run: |
           docker build -t "$REPO:$TAG" ./app
@@ -46,9 +44,18 @@ jobs:
         with:
           terraform_version: 1.9.0
 
+      - name: Generate backend config from secrets
+        working-directory: terraform
+        run: |
+          cat > backend.hcl <<EOF
+          bucket         = "${{ secrets.TF_STATE_BUCKET }}"
+          dynamodb_table = "${{ secrets.TF_LOCK_TABLE }}"
+          region         = "us-west-2"
+          EOF
+
       - name: Terraform init
         working-directory: terraform
-        run: terraform init -input=false
+        run: terraform init -input=false -backend-config=backend.hcl
 
       - name: Terraform apply
         working-directory: terraform

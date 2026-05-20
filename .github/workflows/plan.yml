@@ -23,13 +23,21 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: us-east-1
+          aws-region: us-west-2
 
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.0
 
-      - run: terraform init -input=false
+      - name: Generate backend config from secrets
+        run: |
+          cat > backend.hcl <<EOF
+          bucket         = "${{ secrets.TF_STATE_BUCKET }}"
+          dynamodb_table = "${{ secrets.TF_LOCK_TABLE }}"
+          region         = "us-west-2"
+          EOF
+
+      - run: terraform init -input=false -backend-config=backend.hcl
 
       - run: terraform fmt -check
 
@@ -38,4 +46,3 @@ jobs:
       - name: Plan
         id: plan
         run: terraform plan -input=false -no-color
-        continue-on-error: false

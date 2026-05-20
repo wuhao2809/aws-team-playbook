@@ -1,6 +1,10 @@
-# ECS Fargate service running the Flask container. Pulls the image
-# from the ECR repo defined in ecr.tf at the tag specified by
-# var.image_tag (which CI overrides with the commit SHA on apply).
+# ECS Fargate service running the Flask container. The ECR repo is
+# bootstrap-managed (so CI can push the image *before* this stack
+# runs), so we look it up via a data source rather than declaring it.
+
+data "aws_ecr_repository" "app" {
+  name = "${var.project}-app"
+}
 
 resource "aws_ecs_cluster" "main" {
   name = "${var.project}-cluster"
@@ -85,7 +89,7 @@ resource "aws_ecs_task_definition" "app" {
 
   container_definitions = jsonencode([{
     name      = "app"
-    image     = "${aws_ecr_repository.app.repository_url}:${var.image_tag}"
+    image     = "${data.aws_ecr_repository.app.repository_url}:${var.image_tag}"
     essential = true
     portMappings = [{ containerPort = 8080, hostPort = 8080 }]
     environment = [

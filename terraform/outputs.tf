@@ -5,5 +5,5 @@ output "alb_dns_name" {
 
 output "ecr_repository_url" {
   description = "Where CI pushes the container image."
-  value       = aws_ecr_repository.app.repository_url
+  value       = data.aws_ecr_repository.app.repository_url
 }

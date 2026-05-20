@@ -1,88 +1,138 @@
-# TeamGram
+# TeamGram — Capstone AWS Playbook
 
-Capstone onboarding exercise for NEU. A shared "class wall" hosted on AWS where every student posts a self-intro after submitting a one-line Terraform PR that allowlists their IP.
+A template repo each capstone team copies into their own private GitHub repo and deploys to their own AWS Innovation Sandbox lease. After a one-time `./bootstrap.sh`, the team works through PRs: each member edits a single line in `terraform.tfvars` to add their IP, opens a PR, gets it reviewed, merges, and GitHub Actions deploys.
 
-**👉 Students: read [`../Collaboration Doc/TeamGram.md`](../Collaboration%20Doc/TeamGram.md) first.** That is the assignment. This README is for instructors and for students who want to understand the codebase after they finish the exercise.
+**👉 Students: read [`../Collaboration Doc/TeamGram.md`](../Collaboration%20Doc/TeamGram.md) first.** That is the assignment narrative. This README is the operational guide for whoever runs `bootstrap.sh` (typically the team lead on day 1).
 
 ---
+
+## What you get
+
+```
+                                 Internet
+                                    │
+                                    ▼
+                  ALB (security group: allowlisted IPs only)
+                                    │
+                                    ▼
+                       ECS Fargate (Flask, from ECR)
+                          │                 │
+                  GET / read              POST /intro enqueue
+                          │                 │
+                          ▼                 ▼
+                      DynamoDB ◀──── Lambda ◀──── SQS
+```
+
+Plus: S3 + DynamoDB lock for shared Terraform state, and an OIDC IAM role that GitHub Actions assumes to deploy.
 
 ## Repo layout
 
 ```
 teamgram/
-├── app/                  Flask API (containerized, runs on ECS Fargate)
+├── bootstrap.sh                 ONE-time setup script
+├── bootstrap/
+│   └── iam-trust-policy.json.tmpl
+├── app/                         Flask API (containerized, on ECS)
 │   ├── app.py
 │   ├── requirements.txt
 │   └── Dockerfile
-├── lambda/               SQS consumer (writes posts to DynamoDB)
+├── lambda/                      SQS consumer
 │   ├── handler.py
 │   └── requirements.txt
-├── terraform/            All infrastructure as code
-│   ├── backend.tf        S3 + DynamoDB lock for shared state
+├── terraform/
+│   ├── backend.tf               partial backend (filled by backend.hcl)
 │   ├── providers.tf
 │   ├── variables.tf
-│   ├── terraform.tfvars  ← THIS is the file students edit
-│   ├── network.tf        VPC, subnets
-│   ├── alb.tf            ALB + security group (the allowlist lives here)
-│   ├── ecr.tf
-│   ├── ecs.tf            Fargate service + IAM
-│   ├── sqs_lambda.tf     SQS queue + Lambda consumer
+│   ├── terraform.tfvars         ← THE FILE STUDENTS EDIT
+│   ├── network.tf               VPC + subnets
+│   ├── alb.tf                   ALB + the IP allowlist SG
+│   ├── ecs.tf                   Fargate service + IAM
+│   ├── sqs_lambda.tf            queue + Lambda + event mapping
 │   ├── dynamodb.tf
 │   └── outputs.tf
 └── .github/workflows/
-    ├── plan.yml          terraform plan on PR
-    └── apply.yml         terraform apply + image build/push on merge to main
+    ├── plan.yml                 terraform plan on PR
+    └── apply.yml                build image + terraform apply on merge
 ```
 
-## One-time instructor setup
+## Day-1 setup (team lead, ~5 minutes)
 
-Before the first student opens a PR, an instructor must:
+Prerequisites on your laptop:
 
-1. **Create the state backend manually** (chicken-and-egg — Terraform can't create its own backend):
-   ```bash
-   aws s3api create-bucket --bucket teamgram-tfstate-<unique> --region us-east-1
-   aws s3api put-bucket-versioning --bucket teamgram-tfstate-<unique> \
-     --versioning-configuration Status=Enabled
-   aws dynamodb create-table --table-name teamgram-tflock \
-     --attribute-definitions AttributeName=LockID,AttributeType=S \
-     --key-schema AttributeName=LockID,KeyType=HASH \
-     --billing-mode PAY_PER_REQUEST
-   ```
-   Then update `terraform/backend.tf` with the bucket name.
+- AWS CLI authenticated to your team's sandbox lease (`aws sts get-caller-identity` should print the sandbox account ID)
+- GitHub CLI authenticated to the GitHub account that owns the team repo (`gh auth status`)
+- `terraform`, `jq`, `git`, `openssl` installed
 
-2. **Create a GitHub Actions IAM role** with OIDC trust to the class repo. Save its ARN as the `AWS_DEPLOY_ROLE_ARN` repo secret. Permissions needed: ECR push, ECS deploy, Lambda update, S3/DynamoDB on the state backend, plus the resource types Terraform manages.
+Then:
 
-3. **Seed `terraform.tfvars`** with the instructor's public IP so the wall is visible from day 1.
+```bash
+# 1. Create your team's repo from this template, then clone it
+gh repo create your-org/your-team-teamgram --template wuhao2809/aws-team-playbook --private --clone
+cd your-team-teamgram
 
-4. **First apply**, run manually from a workstation (just this one time):
-   ```bash
-   cd terraform
-   terraform init
-   terraform apply
-   ```
-   After this, *only GitHub Actions ever applies*.
+# 2. Bootstrap your sandbox
+./bootstrap.sh
+```
 
-5. **Post the ALB DNS name** in the class Slack so students know where to go after their PR merges.
+`bootstrap.sh` is idempotent — re-run it any time. It creates:
 
-## What students actually do
+| AWS resource | Purpose |
+|---|---|
+| S3 bucket `teamgram-tfstate-<random>` | Terraform remote state |
+| DynamoDB table `teamgram-tflock` | Terraform state lock |
+| ECR repo `teamgram-app` | container registry for the Flask image |
+| OIDC identity provider | lets GitHub Actions assume an AWS role |
+| IAM role `teamgram-gha-deploy` | the role CI assumes (AdministratorAccess, scoped to your repo + sandbox) |
 
-See the full doc, but the TL;DR is:
+…and sets these GitHub repo secrets:
 
-1. Get their public IP from `checkip.amazonaws.com`.
-2. Add `"x.x.x.x/32",  # Their Name` to `allowed_ips` in `terraform/terraform.tfvars`.
-3. Open a PR. CI runs `terraform plan` and posts the diff.
-4. Merge after review. CI runs `terraform apply`.
-5. Visit the ALB URL and post their self-intro.
+| Secret | Used by |
+|---|---|
+| `AWS_DEPLOY_ROLE_ARN` | both workflows for OIDC auth |
+| `TF_STATE_BUCKET` | both workflows to fill the partial backend |
+| `TF_LOCK_TABLE` | both workflows to fill the partial backend |
 
-## How the request flow works
+## Day-1, second step (team lead)
 
-- `GET /` → ECS reads DynamoDB → renders HTML wall.
-- `POST /intro` → ECS validates form → publishes to SQS → returns 200 immediately.
-- SQS triggers Lambda → Lambda writes to DynamoDB.
-- Next page load shows the new card.
+Seed the IP allowlist with your own IP so you can confirm the wall works:
 
-The SQS+Lambda hop exists for pedagogy: it gives students who haven't taken distributed systems a concrete look at async processing, retries, and decoupling.
+```bash
+# get your public IP
+curl -s https://checkip.amazonaws.com/
+
+# edit terraform/terraform.tfvars and add your /32 line
+git add terraform/terraform.tfvars
+git commit -m "Seed allowlist with team-lead IP"
+git push origin main
+```
+
+Watch the **terraform-apply** workflow run in the Actions tab. When it succeeds, the last step prints the ALB URL. Open it in your browser — you should see the (empty) wall.
+
+## After day 1 (every other student)
+
+Each teammate adds their IP via PR. See `../Collaboration Doc/TeamGram.md` for the full student-facing flow.
+
+## Local development
+
+You don't need to run anything locally — CI does it all. But for debugging Terraform plans:
+
+```bash
+cd terraform
+terraform init -backend-config=backend.hcl   # backend.hcl was written by bootstrap.sh
+terraform plan
+```
+
+`backend.hcl` is gitignored — it lives only on your laptop.
 
 ## Cost
 
-Roughly $5–15/month idle (mostly ALB hours + Fargate task). Fits comfortably in AWS credits.
+Roughly $5–15/month idle (mostly ALB hours + 1 Fargate task). Fits comfortably in sandbox credits.
+
+## Cleanup (end of semester)
+
+```bash
+cd terraform
+terraform destroy -var "image_tag=latest"
+```
+
+Then either let the sandbox lease expire (everything goes with it) or manually empty the state bucket and delete the bootstrap resources.
