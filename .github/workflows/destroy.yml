@@ -1,0 +1,66 @@
+name: terraform-destroy
+
+# Manual-only. Tears down the app stack and (optionally) the bootstrap layer.
+# Anyone with write access to the repo can trigger this.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type DESTROY in capitals to confirm. Anything else aborts.'
+        required: true
+        type: string
+      include_bootstrap:
+        description: 'Also delete the S3 state bucket, DynamoDB lock, ECR repo, and IAM deploy role'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  destroy:
+    if: ${{ inputs.confirm == 'DESTROY' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-west-2
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Generate backend config from secrets
+        working-directory: terraform
+        run: |
+          cat > backend.hcl <<EOF
+          bucket         = "${{ secrets.TF_STATE_BUCKET }}"
+          dynamodb_table = "${{ secrets.TF_LOCK_TABLE }}"
+          region         = "us-west-2"
+          EOF
+
+      - name: Terraform init
+        working-directory: terraform
+        run: terraform init -input=false -backend-config=backend.hcl
+
+      # Destroy the app stack first. The image_tag var has no effect on
+      # destroy but Terraform still requires it to be set.
+      - name: Terraform destroy (app stack)
+        working-directory: terraform
+        run: terraform destroy -auto-approve -input=false -var "image_tag=destroy"
+
+      # Bootstrap layer is destroyed only if the user opted in. Note this
+      # makes the AWS_DEPLOY_ROLE_ARN secret stale — the next run of any
+      # workflow will fail until ./bootstrap.sh is re-run locally.
+      - name: Destroy bootstrap (S3 / DynamoDB / ECR / IAM role)
+        if: ${{ inputs.include_bootstrap }}
+        env:
+          CONFIRM: DESTROY
+          AWS_REGION: us-west-2
+        run: ./bootstrap-destroy.sh
