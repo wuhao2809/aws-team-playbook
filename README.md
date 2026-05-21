@@ -400,7 +400,7 @@ If you get a connection timeout, it means either (a) your IP didn't make it into
 
 ### Why the SQS + Lambda hop?
 
-You could have ECS write to DynamoDB directly. We added SQS + Lambda to demonstrate **asynchronous processing** — the most important pattern in distributed systems for those of you who haven't taken 7610/distributed systems yet.
+You could have ECS write to DynamoDB directly. We added SQS + Lambda to demonstrate **asynchronous processing** — the most important pattern in distributed systems for those of you who haven't taken CS 6650/Building Scalable Distributed Systems yet.
 
 The benefits become real when:
 
