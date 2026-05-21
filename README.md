@@ -252,7 +252,7 @@ Each team's AWS Innovation Sandbox lease provides **temporary** AWS credentials 
 
 1. Open the AWS Innovation Sandbox portal your instructor shared with your team.
 2. Click into your team's lease.
-3. Click **"AWS CLI Access"** (or similarly named — the button that shows command-line credentials).
+3. Click **"Access Key"** (the button that shows command-line credentials).
 4. The portal shows a block that looks like:
 
 ```bash
