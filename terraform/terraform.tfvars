@@ -12,4 +12,5 @@
 allowed_ips = [
   "208.98.212.98/32",   # instructor (do not remove)
   # add your line below
+  "64.180.251.134/32",  # Yuan Tian
 ]
